@@ -24,6 +24,7 @@ body{font-family:'Fredoka',sans-serif;background:linear-gradient(135deg,#e0f2fe 
 </header>
 <div id="ar-container" class="hidden relative w-full max-w-4xl h-[520px] bg-slate-900 rounded-3xl overflow-hidden mb-4 border-4 border-purple-500 card-shadow z-10">
  <video id="webcam-video" autoplay playsinline muted class="hidden"></video><canvas id="ar-canvas" class="w-full h-full object-cover"></canvas>
+ <div id="ar-feedback" class="hidden absolute left-1/2 top-[165px] -translate-x-1/2 max-w-[90%] px-5 py-3 rounded-2xl text-center text-lg md:text-xl font-extrabold shadow-xl z-30 pointer-events-none"></div>
  <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none"><div class="flex items-center gap-2 bg-black/60 text-white px-4 py-2 rounded-2xl text-xs md:text-sm font-bold"><span id="hand-status-dot" class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span><span id="hand-status-text">Mencari Tangan...</span></div><div class="flex gap-2"><div class="bg-black/60 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-semibold">Cubit = Ambil</div><div class="bg-black/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-semibold">Buka = Lepaskan</div></div></div>
  <button onclick="toggleARMode()" class="absolute bottom-4 right-4 bg-red-500/90 hover:bg-red-600 text-white px-4 py-2 rounded-2xl text-xs font-bold shadow-lg"><i class="fa-solid fa-video-slash"></i> Tutup AR</button>
 </div>
@@ -41,39 +42,40 @@ body{font-family:'Fredoka',sans-serif;background:linear-gradient(135deg,#e0f2fe 
 <script>
 'use strict';
 const ANIMALS_DATA=[
-{id:'kucing',name:'Kucing',emoji:'🐱',color:'#ffedd5',borderColor:'#fdba74',textColor:'#c2410c',audioFile:'dragon-studio-cat-meow-401729.mp3',localPath:'audio/dragon-studio-cat-meow-401729.mp3'},
-{id:'anjing',name:'Anjing',emoji:'🐶',color:'#fef3c7',borderColor:'#fcd34d',textColor:'#b45309',audioFile:'dragon-studio-dog-barking-406629.mp3',localPath:'audio/dragon-studio-dog-barking-406629.mp3'},
-{id:'ikan',name:'Ikan',emoji:'🐟',color:'#dbeafe',borderColor:'#93c5fd',textColor:'#1d4ed8',audioFile:'freesound_gamestudio-material-underwater-fish-394522.mp3',localPath:'audio/freesound_gamestudio-material-underwater-fish-394522.mp3'},
-{id:'ayam',name:'Ayam',emoji:'🐔',color:'#fee2e2',borderColor:'#fca5a5',textColor:'#b91c1c',audioFile:'wings_of_freedom-chicken-sound-402826.mp3',localPath:'audio/wings_of_freedom-chicken-sound-402826.mp3'},
-{id:'itik',name:'Itik',emoji:'🦆',color:'#fef9c3',borderColor:'#fde047',textColor:'#854d0e',audioFile:'magiaz-duck-405695.mp3',localPath:'audio/magiaz-duck-405695.mp3'},
-{id:'burung',name:'Burung',emoji:'🐦',color:'#d1fae5',borderColor:'#6ee7b7',textColor:'#047857',audioFile:'dragon-studio-bird-chirping-482865.mp3',localPath:'audio/dragon-studio-bird-chirping-482865.mp3'}];
-let currentRound=0,score=0,targetAnimal=null,shuffledAnimals=[],isARActive=false,handLandmarker=null,videoElement=null,canvasElement=null,canvasCtx=null,cameraStream=null,lastVideoTime=-1,handDetected=false,isPinching=false,grabbedAnimal=null,arCards=[],arTargetZone={x:0,y:0,w:0,h:0},soundButtonRect={x:0,y:0,w:0,h:0},soundButtonCooldown=false,arLoopRunning=false;
+{id:'kucing',name:'Kucing',emoji:'🐱',color:'#ffedd5',borderColor:'#fdba74',textColor:'#c2410c',audioFile:'dragon-studio-cat-meow-401729.mp3',localPath:'dragon-studio-cat-meow-401729.mp3'},
+{id:'anjing',name:'Anjing',emoji:'🐶',color:'#fef3c7',borderColor:'#fcd34d',textColor:'#b45309',audioFile:'dragon-studio-dog-barking-406629.mp3',localPath:'dragon-studio-dog-barking-406629.mp3'},
+{id:'ikan',name:'Ikan',emoji:'🐟',color:'#dbeafe',borderColor:'#93c5fd',textColor:'#1d4ed8',audioFile:'freesound_gamestudio-material-underwater-fish-394522.mp3',localPath:'freesound_gamestudio-material-underwater-fish-394522.mp3'},
+{id:'ayam',name:'Ayam',emoji:'🐔',color:'#fee2e2',borderColor:'#fca5a5',textColor:'#b91c1c',audioFile:'wings_of_freedom-chicken-sound-402826.mp3',localPath:'wings_of_freedom-chicken-sound-402826.mp3'},
+{id:'itik',name:'Itik',emoji:'🦆',color:'#fef9c3',borderColor:'#fde047',textColor:'#854d0e',audioFile:'magiaz-duck-405695.mp3',localPath:'magiaz-duck-405695.mp3'},
+{id:'burung',name:'Burung',emoji:'🐦',color:'#d1fae5',borderColor:'#6ee7b7',textColor:'#047857',audioFile:'dragon-studio-bird-chirping-482865.mp3',localPath:'dragon-studio-bird-chirping-482865.mp3'}];
+let currentRound=0,score=0,targetAnimal=null,answerLocked=false,shuffledAnimals=[],isARActive=false,handLandmarker=null,videoElement=null,canvasElement=null,canvasCtx=null,cameraStream=null,lastVideoTime=-1,handDetected=false,isPinching=false,grabbedAnimal=null,arCards=[],arTargetZone={x:0,y:0,w:0,h:0},soundButtonRect={x:0,y:0,w:0,h:0},soundButtonCooldown=false,arLoopRunning=false;
 const globalAudio=new Audio();
 function el(id){return document.getElementById(id)}
 function showToast(msg){const toast=el('toast-modal');el('toast-message').textContent=msg;toast.classList.remove('hidden');setTimeout(()=>toast.classList.add('hidden'),4500)}
 function initAudioEngine(){globalAudio.addEventListener('ended',()=>updateAudioUIState(false));globalAudio.addEventListener('error',()=>updateAudioUIState(false))}
 function updateAudioUIState(playing){const bt=el('btn-listen-text'),st=el('status-text'),ic=el('speaker-icon');if(bt)bt.textContent=playing?'SEDANG DIMAINKAN...':'DENGAR BUNYI';if(st){st.textContent=playing?'🔊 Memainkan rakaman bunyi haiwan sebenar...':'Tekan atau sentuh butang untuk mendengar';st.className='mt-3 text-xs md:text-sm font-semibold '+(playing?'text-emerald-600':'text-gray-500')+' h-6'}if(ic)ic.className=playing?'fa-solid fa-volume-high text-2xl text-yellow-300 animate-bounce':'fa-solid fa-volume-high text-2xl'}
-function playAnimalSound(animal) {
-  if (!animal) return;
-
+function playAnimalSound(animal){
+  if(!animal)return;
   globalAudio.pause();
-  globalAudio.src = new URL(animal.audioFile, document.baseURI).href;
+  globalAudio.currentTime=0;
+  const filename=animal.audioFile||animal.localPath;
+  globalAudio.onerror=null;
+  globalAudio.src=new URL(filename,window.location.href).href;
   globalAudio.load();
-
-  updateAudioUIState(true);
-
-  globalAudio.play().catch(error => {
-    console.error("Audio error:", error, globalAudio.src);
+  globalAudio.play().then(()=>{
+    updateAudioUIState(true);
+  }).catch(error=>{
+    console.error('Audio playback failed:',error,'URL:',globalAudio.src);
     updateAudioUIState(false);
-    showToast("Audio tidak dapat dimainkan: " + animal.audioFile);
+    showToast('Audio tidak dapat dimainkan. Semak fail: '+filename);
   });
 }
 function replayCurrentAnimalSound(){if(targetAnimal)playAnimalSound(targetAnimal);else testAudio()}
 function testAudio(){playAnimalSound(ANIMALS_DATA[0])}
 function startGame(enableAR=false){currentRound=0;score=0;el('score-display').textContent='0';shuffledAnimals=[...ANIMALS_DATA].sort(()=>Math.random()-.5);el('screen-start').classList.add('hidden');el('screen-result').classList.add('hidden');el('screen-game').classList.remove('hidden');if(enableAR){toggleARMode()}else if(isARActive){toggleARMode()}loadRound()}
-function loadRound(){if(currentRound>=shuffledAnimals.length){showResultScreen();return}targetAnimal=shuffledAnimals[currentRound];el('round-indicator').textContent=`${currentRound+1} / ${shuffledAnimals.length}`;el('progress-bar-fill').style.width=`${((currentRound+1)/shuffledAnimals.length)*100}%`;el('drop-zone').className='w-full bg-blue-50/90 border-4 border-dashed border-blue-300 rounded-3xl p-4 min-h-[120px] flex flex-col items-center justify-center';el('drop-instructions').classList.remove('hidden');el('drop-content').innerHTML='';el('feedback-banner').className='hidden w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold';renderAnimalCards();setupARCanvasLayout();setTimeout(()=>playAnimalSound(targetAnimal),400)}
+function loadRound(){answerLocked=false;if(currentRound>=shuffledAnimals.length){showResultScreen();return}targetAnimal=shuffledAnimals[currentRound];el('round-indicator').textContent=`${currentRound+1} / ${shuffledAnimals.length}`;el('progress-bar-fill').style.width=`${((currentRound+1)/shuffledAnimals.length)*100}%`;el('drop-zone').className='w-full bg-blue-50/90 border-4 border-dashed border-blue-300 rounded-3xl p-4 min-h-[120px] flex flex-col items-center justify-center';el('drop-instructions').classList.remove('hidden');el('drop-content').innerHTML='';el('feedback-banner').className='hidden w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold';renderAnimalCards();setupARCanvasLayout();setTimeout(()=>playAnimalSound(targetAnimal),400)}
 function renderAnimalCards(){const grid=el('animals-grid');grid.innerHTML='';[...ANIMALS_DATA].sort(()=>Math.random()-.5).forEach(animal=>{const card=document.createElement('button');card.type='button';card.id=`card-${animal.id}`;card.className='card-draggable rounded-2xl p-4 border-4 card-shadow flex flex-col items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all select-none';card.style.backgroundColor=animal.color;card.style.borderColor=animal.borderColor;card.style.color=animal.textColor;card.innerHTML=`<span class="text-5xl md:text-6xl pointer-events-none">${animal.emoji}</span><span class="font-extrabold text-base md:text-xl pointer-events-none">${animal.name}</span>`;card.addEventListener('click',()=>handleSelectAnimal(animal));card.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',animal.id));card.draggable=true;grid.appendChild(card)});const dz=el('drop-zone');dz.ondragover=e=>e.preventDefault();dz.ondrop=e=>{e.preventDefault();const a=ANIMALS_DATA.find(x=>x.id===e.dataTransfer.getData('text/plain'));if(a)handleSelectAnimal(a)}}
-function handleSelectAnimal(animal){if(!targetAnimal||!el('feedback-banner').classList.contains('hidden')===false)return;const banner=el('feedback-banner');el('drop-instructions').classList.add('hidden');el('drop-content').innerHTML=`<div class="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border-2 border-blue-300 shadow-md"><span class="text-4xl">${animal.emoji}</span><span class="text-xl font-bold text-gray-800">${animal.name}</span></div>`;if(animal.id===targetAnimal.id){score+=10;el('score-display').textContent=score;const msgs={kucing:'Bagus! Ini bunyi kucing!',anjing:'Hebat! Ini bunyi anjing!',ikan:'Pandai! Ini bunyi gelembung air ikan!',ayam:'Syabas! Ini bunyi ayam!',itik:'Bagus sekali! Ini bunyi itik!',burung:'Tahniah! Ini bunyi burung!'};banner.className='w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-400 block';banner.textContent='🎉 '+msgs[animal.id];setTimeout(()=>{currentRound++;loadRound()},1600)}else{banner.className='w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold bg-red-100 text-red-800 border-2 border-red-300 block';banner.textContent='❌ Cuba lagi! Dengar bunyi sekali lagi.';setTimeout(()=>{banner.className='hidden w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold';el('drop-instructions').classList.remove('hidden');el('drop-content').innerHTML='';replayCurrentAnimalSound()},900)}}
+function handleSelectAnimal(animal){if(!targetAnimal||answerLocked)return;const banner=el('feedback-banner');el('drop-instructions').classList.add('hidden');el('drop-content').innerHTML=`<div class="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border-2 border-blue-300 shadow-md"><span class="text-4xl">${animal.emoji}</span><span class="text-xl font-bold text-gray-800">${animal.name}</span></div>`;if(animal.id===targetAnimal.id){answerLocked=true;score+=10;el('score-display').textContent=score;const msgs={kucing:'Bagus! Ini bunyi kucing!',anjing:'Hebat! Ini bunyi anjing!',ikan:'Pandai! Ini bunyi gelembung air ikan!',ayam:'Syabas! Ini bunyi ayam!',itik:'Bagus sekali! Ini bunyi itik!',burung:'Tahniah! Ini bunyi burung!'};banner.className='w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold bg-emerald-100 text-emerald-800 border-2 border-emerald-400 block';banner.textContent='🎉 '+msgs[animal.id];setTimeout(()=>{currentRound++;loadRound()},1600)}else{banner.className='w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold bg-red-100 text-red-800 border-2 border-red-300 block';banner.textContent='❌ Cuba lagi! Dengar bunyi sekali lagi.';setTimeout(()=>{banner.className='hidden w-full text-center py-3 px-4 rounded-2xl text-lg font-extrabold';el('drop-instructions').classList.remove('hidden');el('drop-content').innerHTML='';replayCurrentAnimalSound()},900)}}
 function showResultScreen(){if(isARActive)toggleARMode();el('screen-game').classList.add('hidden');el('screen-result').classList.remove('hidden');el('final-score').textContent=`${score} / 60`;for(let i=0;i<30;i++){const c=document.createElement('div');c.className='confetti rounded-full';c.style.left=Math.random()*100+'vw';c.style.backgroundColor=['#f59e0b','#10b981','#3b82f6','#ec4899','#8b5cf6'][Math.floor(Math.random()*5)];c.style.animationDuration=(Math.random()*2+2)+'s';document.body.appendChild(c);setTimeout(()=>c.remove(),4000)}}
 async function loadMediaPipe(){if(handLandmarker)return true;try{showToast('Memuatkan enjin pengesanan tangan...');const mp=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm');const vision=await mp.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');handLandmarker=await mp.HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:'CPU'},runningMode:'VIDEO',numHands:1});return true}catch(err){console.error('MediaPipe init failed',err);showToast('Enjin pengesanan tangan gagal dimuatkan. Cuba Mod Skrin Sentuh atau semak internet.');return false}}
 async function toggleARMode(){if(isARActive){isARActive=false;stopCameraStream();el('ar-container').classList.add('hidden');el('animals-grid').classList.remove('hidden');el('drop-zone').classList.remove('hidden');el('ar-btn-label').textContent='Mod AR Gesture';arLoopRunning=false;return}
@@ -84,7 +86,46 @@ function stopCameraStream(){if(cameraStream){cameraStream.getTracks().forEach(t=
 function resizeCanvas(){if(!canvasElement)return;const w=canvasElement.clientWidth||800,h=canvasElement.clientHeight||520;if(canvasElement.width!==w||canvasElement.height!==h){canvasElement.width=w;canvasElement.height=h}}
 function setupARCanvasLayout(){if(!canvasElement)return;resizeCanvas();const w=canvasElement.width,h=canvasElement.height;arTargetZone={x:w/2-120,y:12,w:240,h:85};soundButtonRect={x:w/2-90,y:105,w:180,h:48};arCards=[];const cols=3,cardW=Math.min(120,(w-40)/3),cardH=100,space=(w-cols*cardW)/(cols+1);ANIMALS_DATA.forEach((animal,i)=>{const row=Math.floor(i/cols),col=i%cols,x=space+col*(cardW+space),y=Math.max(170,h-230)+row*(cardH+12);arCards.push({animal,x,y,w:cardW,h:cardH,initialX:x,initialY:y})})}
 function predictWebcamLoop(){if(!isARActive||!videoElement||!handLandmarker||!canvasCtx)return;resizeCanvas();if(videoElement.currentTime!==lastVideoTime&&videoElement.readyState>=2){lastVideoTime=videoElement.currentTime;try{const results=handLandmarker.detectForVideo(videoElement,performance.now());canvasCtx.save();canvasCtx.clearRect(0,0,canvasElement.width,canvasElement.height);canvasCtx.translate(canvasElement.width,0);canvasCtx.scale(-1,1);canvasCtx.drawImage(videoElement,0,0,canvasElement.width,canvasElement.height);canvasCtx.restore();if(results.landmarks&&results.landmarks.length){const lm=results.landmarks[0],ix=(1-lm[8].x)*canvasElement.width,iy=lm[8].y*canvasElement.height,tx=(1-lm[4].x)*canvasElement.width,ty=lm[4].y*canvasElement.height,prev=isPinching;isPinching=Math.hypot(ix-tx,iy-ty)<45;el('hand-status-text').textContent=isPinching?'Cubit (Mengambil)':'Tangan Dikesan';el('hand-status-dot').className='w-3 h-3 rounded-full bg-emerald-400 animate-pulse';drawHand(lm);processGesture(ix,iy,isPinching,prev)}else{el('hand-status-text').textContent='Mencari Tangan...';el('hand-status-dot').className='w-3 h-3 rounded-full bg-red-500 animate-pulse';if(grabbedAnimal){grabbedAnimal.x=grabbedAnimal.initialX;grabbedAnimal.y=grabbedAnimal.initialY;grabbedAnimal=null}}renderARScene()}catch(e){console.error('Hand tracking error',e);showToast('Ralat pengesanan tangan. Cuba tutup dan buka AR semula.');isARActive=false;stopCameraStream();return}}requestAnimationFrame(predictWebcamLoop)}
-function processGesture(x,y,pinch,prev){if(pinch&&!prev&&inside(x,y,soundButtonRect)&&!soundButtonCooldown){replayCurrentAnimalSound();soundButtonCooldown=true;setTimeout(()=>soundButtonCooldown=false,1200)}if(pinch&&!prev&&!grabbedAnimal)for(const c of arCards)if(inside(x,y,c)){grabbedAnimal=c;break}if(pinch&&grabbedAnimal){grabbedAnimal.x=x-grabbedAnimal.w/2;grabbedAnimal.y=y-grabbedAnimal.h/2}if(!pinch&&prev&&grabbedAnimal){if(inside(grabbedAnimal.x+grabbedAnimal.w/2,grabbedAnimal.y+grabbedAnimal.h/2,arTargetZone))handleSelectAnimal(grabbedAnimal.animal);grabbedAnimal.x=grabbedAnimal.initialX;grabbedAnimal.y=grabbedAnimal.initialY;grabbedAnimal=null}}
+let arFeedbackTimer=null;
+function showARFeedback(message,correct){
+  const box=el('ar-feedback');
+  if(!box)return;
+  if(arFeedbackTimer)clearTimeout(arFeedbackTimer);
+  box.textContent=message;
+  box.className='absolute left-1/2 top-[165px] -translate-x-1/2 max-w-[90%] px-5 py-3 rounded-2xl text-center text-lg md:text-xl font-extrabold shadow-xl z-30 pointer-events-none '+(correct?'bg-emerald-100 text-emerald-800 border-4 border-emerald-400':'bg-red-100 text-red-800 border-4 border-red-400');
+  arFeedbackTimer=setTimeout(()=>box.classList.add('hidden'),correct?1500:1100);
+}
+function processGesture(x,y,pinch,prev){
+  if(pinch&&!prev&&inside(x,y,soundButtonRect)&&!soundButtonCooldown){
+    replayCurrentAnimalSound();
+    soundButtonCooldown=true;
+    setTimeout(()=>soundButtonCooldown=false,1200);
+  }
+  if(pinch&&!prev&&!grabbedAnimal){
+    for(const c of arCards){
+      if(inside(x,y,c)){grabbedAnimal=c;break;}
+    }
+  }
+  if(pinch&&grabbedAnimal){
+    grabbedAnimal.x=x-grabbedAnimal.w/2;
+    grabbedAnimal.y=y-grabbedAnimal.h/2;
+  }
+  if(!pinch&&prev&&grabbedAnimal){
+    const droppedAnimal=grabbedAnimal.animal;
+    const cx=grabbedAnimal.x+grabbedAnimal.w/2;
+    const cy=grabbedAnimal.y+grabbedAnimal.h/2;
+    if(inside(cx,cy,arTargetZone)){
+      const correct=!!targetAnimal&&droppedAnimal.id===targetAnimal.id;
+      handleSelectAnimal(droppedAnimal);
+      showARFeedback(correct?(droppedAnimal.name+'! Betul! 🎉'):'Belum tepat! Cuba lagi. 👆',correct);
+    }else{
+      showARFeedback('Lepaskan haiwan di dalam kotak biru! 👆',false);
+    }
+    grabbedAnimal.x=grabbedAnimal.initialX;
+    grabbedAnimal.y=grabbedAnimal.initialY;
+    grabbedAnimal=null;
+  }
+}
 function inside(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
 function drawHand(lm){canvasCtx.fillStyle=isPinching?'#f59e0b':'#10b981';lm.forEach(p=>{canvasCtx.beginPath();canvasCtx.arc((1-p.x)*canvasElement.width,p.y*canvasElement.height,5,0,Math.PI*2);canvasCtx.fill()})}
 function roundRect(ctx,x,y,w,h,r,fill,stroke){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();if(fill)ctx.fill();if(stroke)ctx.stroke()}
