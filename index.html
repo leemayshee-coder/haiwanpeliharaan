@@ -95,37 +95,59 @@ function showARFeedback(message,correct){
   box.className='absolute left-1/2 top-[165px] -translate-x-1/2 max-w-[90%] px-5 py-3 rounded-2xl text-center text-lg md:text-xl font-extrabold shadow-xl z-30 pointer-events-none '+(correct?'bg-emerald-100 text-emerald-800 border-4 border-emerald-400':'bg-red-100 text-red-800 border-4 border-red-400');
   arFeedbackTimer=setTimeout(()=>box.classList.add('hidden'),correct?1500:1100);
 }
+
 function processGesture(x,y,pinch,prev){
   if(pinch&&!prev&&inside(x,y,soundButtonRect)&&!soundButtonCooldown){
     replayCurrentAnimalSound();
     soundButtonCooldown=true;
     setTimeout(()=>soundButtonCooldown=false,1200);
   }
+
   if(pinch&&!prev&&!grabbedAnimal){
     for(const c of arCards){
-      if(inside(x,y,c)){grabbedAnimal=c;break;}
+      if(inside(x,y,c)){
+        grabbedAnimal=c;
+        break;
+      }
     }
   }
+
   if(pinch&&grabbedAnimal){
     grabbedAnimal.x=x-grabbedAnimal.w/2;
     grabbedAnimal.y=y-grabbedAnimal.h/2;
   }
+
   if(!pinch&&prev&&grabbedAnimal){
-    const droppedAnimal=grabbedAnimal.animal;
+    const animal=grabbedAnimal.animal;
     const cx=grabbedAnimal.x+grabbedAnimal.w/2;
     const cy=grabbedAnimal.y+grabbedAnimal.h/2;
-    if(inside(cx,cy,arTargetZone)){
-      const correct=!!targetAnimal&&droppedAnimal.id===targetAnimal.id;
-      handleSelectAnimal(droppedAnimal);
-      showARFeedback(correct?(droppedAnimal.name+'! Betul! 🎉'):'Belum tepat! Cuba lagi. 👆',correct);
+
+    // Allow a larger drop area around the blue target box.
+    const margin=70;
+    const inTarget=
+      cx>=arTargetZone.x-margin &&
+      cx<=arTargetZone.x+arTargetZone.w+margin &&
+      cy>=arTargetZone.y-margin &&
+      cy<=arTargetZone.y+arTargetZone.h+margin;
+
+    if(inTarget){
+      handleSelectAnimal(animal);
+      showARFeedback(
+        animal.id===targetAnimal.id
+          ? '🎉 BETUL! '+animal.name+'!'
+          : '❌ BELUM TEPAT! CUBA LAGI!',
+        animal.id===targetAnimal.id
+      );
     }else{
-      showARFeedback('Lepaskan haiwan di dalam kotak biru! 👆',false);
+      showARFeedback('👆 Lepaskan haiwan di dalam kotak biru!',false);
     }
+
     grabbedAnimal.x=grabbedAnimal.initialX;
     grabbedAnimal.y=grabbedAnimal.initialY;
     grabbedAnimal=null;
   }
 }
+
 function inside(x,y,r){return x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h}
 function drawHand(lm){canvasCtx.fillStyle=isPinching?'#f59e0b':'#10b981';lm.forEach(p=>{canvasCtx.beginPath();canvasCtx.arc((1-p.x)*canvasElement.width,p.y*canvasElement.height,5,0,Math.PI*2);canvasCtx.fill()})}
 function roundRect(ctx,x,y,w,h,r,fill,stroke){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();if(fill)ctx.fill();if(stroke)ctx.stroke()}
