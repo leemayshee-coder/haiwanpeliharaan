@@ -53,7 +53,21 @@ function el(id){return document.getElementById(id)}
 function showToast(msg){const toast=el('toast-modal');el('toast-message').textContent=msg;toast.classList.remove('hidden');setTimeout(()=>toast.classList.add('hidden'),4500)}
 function initAudioEngine(){globalAudio.addEventListener('ended',()=>updateAudioUIState(false));globalAudio.addEventListener('error',()=>updateAudioUIState(false))}
 function updateAudioUIState(playing){const bt=el('btn-listen-text'),st=el('status-text'),ic=el('speaker-icon');if(bt)bt.textContent=playing?'SEDANG DIMAINKAN...':'DENGAR BUNYI';if(st){st.textContent=playing?'🔊 Memainkan rakaman bunyi haiwan sebenar...':'Tekan atau sentuh butang untuk mendengar';st.className='mt-3 text-xs md:text-sm font-semibold '+(playing?'text-emerald-600':'text-gray-500')+' h-6'}if(ic)ic.className=playing?'fa-solid fa-volume-high text-2xl text-yellow-300 animate-bounce':'fa-solid fa-volume-high text-2xl'}
-function playAnimalSound(animal){if(!animal)return;globalAudio.pause();globalAudio.currentTime=0;updateAudioUIState(true);const candidates=[animal.localPath,animal.audioFile];let i=0;const tryNext=()=>{if(i>=candidates.length){updateAudioUIState(false);showToast('Fail bunyi tidak ditemui. Pastikan MP3 berada dalam folder audio.');return}globalAudio.src=new URL(candidates[i++],document.baseURI).href;globalAudio.play().catch(tryNext)};globalAudio.onerror=()=>{globalAudio.onerror=null;tryNext()};globalAudio.src=new URL(candidates[i++],document.baseURI).href;globalAudio.play().catch(tryNext)}
+function playAnimalSound(animal) {
+  if (!animal) return;
+
+  globalAudio.pause();
+  globalAudio.src = new URL(animal.audioFile, document.baseURI).href;
+  globalAudio.load();
+
+  updateAudioUIState(true);
+
+  globalAudio.play().catch(error => {
+    console.error("Audio error:", error, globalAudio.src);
+    updateAudioUIState(false);
+    showToast("Audio tidak dapat dimainkan: " + animal.audioFile);
+  });
+}
 function replayCurrentAnimalSound(){if(targetAnimal)playAnimalSound(targetAnimal);else testAudio()}
 function testAudio(){playAnimalSound(ANIMALS_DATA[0])}
 function startGame(enableAR=false){currentRound=0;score=0;el('score-display').textContent='0';shuffledAnimals=[...ANIMALS_DATA].sort(()=>Math.random()-.5);el('screen-start').classList.add('hidden');el('screen-result').classList.add('hidden');el('screen-game').classList.remove('hidden');if(enableAR){toggleARMode()}else if(isARActive){toggleARMode()}loadRound()}
